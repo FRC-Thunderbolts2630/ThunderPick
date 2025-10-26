@@ -131,7 +131,7 @@ export default function Page() {
 
             return null;
         } catch (e) {
-            console.error('Failed to evaluate formula:', formula, 'expression:', expression, e);
+            console.error('Failed to evaluate formula:', formula, e);
             return null;
         }
     };
