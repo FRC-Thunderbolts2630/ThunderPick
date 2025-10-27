@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { inter } from "@/app/ui/fonts";
 import { Analytics } from "@vercel/analytics/react"
+import Script from "next/script";
 import "./globals.css";
 
 
@@ -24,6 +25,19 @@ export default function RootLayout({
       <body
         className={`${inter.className} antialiased dark bg-[#0d111b]`}
       >
+        <Script
+          id="clarity-script"
+          strategy="afterInteractive"
+          dangerouslySetInnerHTML={{
+            __html: `
+              (function(c,l,a,r,i,t,y){
+                  c[a]=c[a]||function(){(c[a].q=c[a].q||[]).push(arguments)};
+                  t=l.createElement(r);t.async=1;t.src="https://www.clarity.ms/tag/"+i;
+                  y=l.getElementsByTagName(r)[0];y.parentNode.insertBefore(t,y);
+              })(window, document, "clarity", "script", "twr055bt3y");
+            `,
+          }}
+        />
         <Analytics />
         {children}
       </body>
