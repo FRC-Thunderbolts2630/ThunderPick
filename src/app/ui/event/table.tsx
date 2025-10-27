@@ -23,7 +23,9 @@ export default function Table({
     setBestAlgaeBot,
     isCSVMode = false,
     onDataChange,
-    onColumnSort
+    onColumnSort,
+    computedColumns = [],
+    onDeleteComputedColumn
 }: {
     data: PicklistSchema2025[] | any[],
     fields: string[],
@@ -38,7 +40,9 @@ export default function Table({
     setBestAlgaeBot: (value: number) => void,
     isCSVMode?: boolean,
     onDataChange?: (data: any[]) => void,
-    onColumnSort?: (columnName: string) => void
+    onColumnSort?: (columnName: string) => void,
+    computedColumns?: Array<{ name: string; formula: string; type: 'numeric' | 'boolean' }>,
+    onDeleteComputedColumn?: (columnName: string) => void
 }) {
     // Hacky solution to update the DragDropContext
     const [newKey, setNewKey] = useState(0);
@@ -268,6 +272,14 @@ export default function Table({
                 return;
             }
 
+            // Skip boolean computed columns
+            const isBooleanColumn = computedColumns.some(
+                col => col.name === fieldName && col.type === 'boolean'
+            );
+            if (isBooleanColumn) {
+                return;
+            }
+
             const dataKey = fieldName.toLowerCase().replace(/\s+/g, '');
             const values: number[] = [];
 
@@ -292,7 +304,7 @@ export default function Table({
         });
 
         return stats;
-    }, [draggedData, fields, isCSVMode]);
+    }, [draggedData, fields, isCSVMode, computedColumns]);
 
     // Sync draggedData back to parent when sortOrder or sortDirection changes (after sorting is complete)
     // This ensures picklistOrder edits persist across re-sorts
@@ -356,19 +368,38 @@ export default function Table({
                                         </select>
                                     </div>
                                 ) : (
-                                    <button
-                                        onClick={() => onColumnSort && onColumnSort(name)}
-                                        className="flex items-center justify-center gap-1 font-bold text-[12px] whitespace-nowrap lg:text-[13px] xl:text-sm hover:text-blue-400 transition-colors cursor-pointer w-full h-full"
-                                        style={{ pointerEvents: 'auto' }}
-                                        disabled={!onColumnSort}
-                                    >
-                                        <span>{name}</span>
-                                        {sortOrder === name && (
-                                            <span className="text-[10px]">
-                                                {sortDirection === 'asc' ? '▲' : '▼'}
-                                            </span>
+                                    <div className="group/header flex items-center justify-center gap-1 w-full h-full">
+                                        <button
+                                            onClick={() => onColumnSort && onColumnSort(name)}
+                                            className="flex items-center justify-center gap-1 font-bold text-[12px] whitespace-nowrap lg:text-[13px] xl:text-sm hover:text-blue-400 transition-colors cursor-pointer"
+                                            style={{ pointerEvents: 'auto' }}
+                                            disabled={!onColumnSort}
+                                        >
+                                            <span>{name}</span>
+                                            {sortOrder === name && (
+                                                <span className="text-[10px]">
+                                                    {sortDirection === 'asc' ? '▲' : '▼'}
+                                                </span>
+                                            )}
+                                        </button>
+                                        {computedColumns.some(col => col.name === name) && onDeleteComputedColumn && (
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    if (confirm(`Are you sure you want to delete the computed column "${name}"?`)) {
+                                                        onDeleteComputedColumn(name);
+                                                    }
+                                                }}
+                                                className="ml-1 p-1 hover:bg-red-500/20 rounded transition-all opacity-0 group-hover/header:opacity-100"
+                                                title="Delete computed column"
+                                                style={{ pointerEvents: 'auto' }}
+                                            >
+                                                <svg className="w-3 h-3 text-gray-400 hover:text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                                </svg>
+                                            </button>
                                         )}
-                                    </button>
+                                    </div>
                                 )
                             }
                         </div>
@@ -408,6 +439,7 @@ export default function Table({
                                                 isCSVMode={isCSVMode}
                                                 updatePicklistOrder={updatePicklistOrder}
                                                 columnStats={columnStats}
+                                                computedColumns={computedColumns}
                                             />
                                         </div>
                                     )}

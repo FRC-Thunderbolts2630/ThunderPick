@@ -38,7 +38,8 @@ const TableRow = memo(function TableRow({
     fields,
     isCSVMode = false,
     updatePicklistOrder,
-    columnStats = {}
+    columnStats = {},
+    computedColumns = []
 }: {
     data: PicklistSchema2025 | CSVRowData,
     selectedBranch: string,
@@ -49,7 +50,8 @@ const TableRow = memo(function TableRow({
     fields?: string[],
     isCSVMode?: boolean,
     updatePicklistOrder?: (teamNumber: number, newOrder: number) => void,
-    columnStats?: { [key: string]: { min: number; max: number } }
+    columnStats?: { [key: string]: { min: number; max: number } },
+    computedColumns?: Array<{ name: string; formula: string; type: 'numeric' | 'boolean' }>
 }) {
     // Initialize isActive based on picklistOrder: 999 means inactive (checkbox checked)
     const [isActive, setActive] = useState(
@@ -191,9 +193,14 @@ const TableRow = memo(function TableRow({
                 displayValue = '-';
             }
 
-            // Calculate heatmap color for numeric columns
+            // Check if this is a boolean computed column
+            const isBooleanColumn = computedColumns.some(
+                col => col.name === fieldName && col.type === 'boolean'
+            );
+
+            // Calculate heatmap color for numeric columns (exclude boolean columns)
             let bgColor: string | undefined;
-            const isHeatmapCell = typeof value === 'number' && columnStats[fieldName];
+            const isHeatmapCell = typeof value === 'number' && columnStats[fieldName] && !isBooleanColumn;
 
             if (isHeatmapCell && typeof value === 'number') {
                 const { min, max } = columnStats[fieldName];

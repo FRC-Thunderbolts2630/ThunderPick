@@ -85,7 +85,7 @@ export default function Page() {
     }, [computedColumns, isStateLoaded]);
 
     // Evaluate a formula for a given row
-    const evaluateFormula = (formula: string, row: CSVRowData, fields: string[]): number | null => {
+    const evaluateFormula = (formula: string, row: CSVRowData, fields: string[], columnType: 'numeric' | 'boolean' = 'numeric'): number | string | null => {
         try {
             // Replace column names with actual values
             let expression = formula;
@@ -125,8 +125,17 @@ export default function Page() {
             // Evaluate the expression safely
             const result = Function('"use strict"; return (' + expression + ')')();
 
-            if (typeof result === 'number' && !isNaN(result) && isFinite(result)) {
-                return result;
+            // Handle numeric columns
+            if (columnType === 'numeric') {
+                if (typeof result === 'number' && !isNaN(result) && isFinite(result)) {
+                    return result;
+                }
+            }
+            // Handle boolean columns
+            else if (columnType === 'boolean') {
+                if (typeof result === 'boolean') {
+                    return result ? 'Yes' : 'No';
+                }
             }
 
             return null;
@@ -142,7 +151,7 @@ export default function Page() {
             const updatedRow = { ...row };
 
             for (const column of columns) {
-                const value = evaluateFormula(column.formula, row, fields);
+                const value = evaluateFormula(column.formula, row, fields, column.type);
                 if (value !== null) {
                     // Store with normalized key
                     const key = column.name.toLowerCase().replace(/\s+/g, '');
@@ -162,17 +171,51 @@ export default function Page() {
 
     // Handle adding a new computed column
     const handleAddComputedColumn = (column: ComputedColumn) => {
-        const newComputedColumns = [...computedColumns, column];
+        // Check if a column with this name already exists
+        const existingIndex = computedColumns.findIndex(c => c.name === column.name);
+
+        let newComputedColumns: ComputedColumn[];
+        let message: string;
+
+        if (existingIndex >= 0) {
+            // Overwrite existing column
+            newComputedColumns = [...computedColumns];
+            newComputedColumns[existingIndex] = column;
+            message = `Computed column "${column.name}" updated successfully!`;
+        } else {
+            // Add new column
+            newComputedColumns = [...computedColumns, column];
+            message = `Computed column "${column.name}" added successfully!`;
+        }
+
+        // Get base fields (non-computed columns)
+        const computedColumnNames = computedColumns.map(c => c.name);
+        const baseFields = csvFields.filter(field => !computedColumnNames.includes(field));
+
+        // Strip all computed columns from data to get clean base
+        const baseData = csvData.map(row => {
+            const newRow = { ...row };
+            computedColumns.forEach(col => {
+                const dataKey = col.name.toLowerCase().replace(/\s+/g, '');
+                const matchingKey = Object.keys(newRow).find(
+                    key => key.toLowerCase() === dataKey
+                );
+                if (matchingKey) {
+                    delete newRow[matchingKey];
+                }
+            });
+            return newRow;
+        });
+
+        // Reapply all computed columns (including the new/updated one)
+        const updatedData = applyComputedColumns(baseData, newComputedColumns, baseFields);
+        const updatedFields = getFieldsWithComputedColumns(baseFields, newComputedColumns);
+
         setComputedColumns(newComputedColumns);
-
-        // Apply the new computed column to existing data
-        const updatedData = applyComputedColumns(csvData, newComputedColumns, csvFields);
         setCSVData(updatedData);
+        setCSVFields(updatedFields);
 
-        // Update fields to include the new column
-        setCSVFields(getFieldsWithComputedColumns(csvFields, newComputedColumns));
-
-        setAlertInfo(["Success", `Computed column "${column.name}" added successfully!`]);
+        setAlertInfo(["Success", message]);
     };
 
     const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -430,6 +473,55 @@ export default function Page() {
         }
     };
 
+    // Handle computed column deletion
+    const handleDeleteComputedColumn = (columnName: string) => {
+        // Remove from computed columns
+        const updatedComputedColumns = computedColumns.filter(col => col.name !== columnName);
+
+        // Get base CSV fields (fields that aren't computed columns)
+        const computedColumnNames = computedColumns.map(col => col.name);
+        const baseFields = csvFields.filter(field => !computedColumnNames.includes(field));
+
+        // Strip ALL computed column values from data to get base data
+        const baseData = csvData.map(row => {
+            const newRow = { ...row };
+            computedColumns.forEach(col => {
+                const dataKey = col.name.toLowerCase().replace(/\s+/g, '');
+                const matchingKey = Object.keys(newRow).find(
+                    key => key.toLowerCase() === dataKey
+                );
+                if (matchingKey) {
+                    delete newRow[matchingKey];
+                }
+            });
+            return newRow;
+        });
+
+        // Reapply remaining computed columns to base data
+        const dataWithComputedColumns = applyComputedColumns(baseData, updatedComputedColumns, baseFields);
+        const fieldsWithComputedColumns = getFieldsWithComputedColumns(baseFields, updatedComputedColumns);
+
+        // Update all state
+        setComputedColumns(updatedComputedColumns);
+        setCSVData(dataWithComputedColumns);
+        setCSVFields(fieldsWithComputedColumns);
+
+        // Update localStorage
+        try {
+            localStorage.setItem(COMPUTED_COLUMNS_KEY, JSON.stringify(updatedComputedColumns));
+        } catch (e) {
+            console.error('Failed to update computed columns in localStorage:', e);
+        }
+
+        // If we're sorting by the deleted column, reset to Picklist Order
+        if (sortOrder === columnName) {
+            setSortOrder('Picklist Order');
+            setSortDirection('asc');
+        }
+
+        setAlertInfo(["Success", `Deleted computed column "${columnName}"`]);
+    };
+
     // Load a saved picklist from sidebar
     const handleLoadPicklist = (picklist: any) => {
         setCSVData(picklist.data);
@@ -516,6 +608,8 @@ export default function Page() {
                         isCSVMode={true}
                         onDataChange={handleDataChange}
                         onColumnSort={handleColumnSort}
+                        computedColumns={computedColumns}
+                        onDeleteComputedColumn={handleDeleteComputedColumn}
                     />
                 </div>
                 <div className={isModalOpen ? '' : 'hidden'}>

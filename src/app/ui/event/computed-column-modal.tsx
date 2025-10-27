@@ -8,6 +8,7 @@ import { PlusIcon } from "@heroicons/react/24/solid";
 export interface ComputedColumn {
     name: string;
     formula: string;
+    type: 'numeric' | 'boolean';
 }
 
 export default function ComputedColumnModal({
@@ -21,7 +22,20 @@ export default function ComputedColumnModal({
 }) {
     const [columnName, setColumnName] = useState("");
     const [formula, setFormula] = useState("");
+    const [columnType, setColumnType] = useState<'numeric' | 'boolean'>('numeric');
     const [error, setError] = useState("");
+
+    const resetForm = () => {
+        setColumnName("");
+        setFormula("");
+        setColumnType('numeric');
+        setError("");
+    };
+
+    const handleClose = () => {
+        resetForm();
+        setModalStatus(false);
+    };
 
     const handleSubmit = (event: FormEvent) => {
         event.preventDefault();
@@ -33,11 +47,7 @@ export default function ComputedColumnModal({
             return;
         }
 
-        // Check if column name already exists
-        if (existingFields.includes(columnName.trim())) {
-            setError("A column with this name already exists.");
-            return;
-        }
+        // Note: We allow overwriting existing columns, so no check for duplicates
 
         // Validate formula
         if (!formula.trim()) {
@@ -55,9 +65,12 @@ export default function ComputedColumnModal({
         // Add the computed column
         onAdd({
             name: columnName.trim(),
-            formula: formula.trim()
+            formula: formula.trim(),
+            type: columnType
         });
 
+        // Reset form and close
+        resetForm();
         setModalStatus(false);
     };
 
@@ -94,11 +107,22 @@ export default function ComputedColumnModal({
         // Try to evaluate the test expression
         try {
             const result = Function('"use strict"; return (' + testExpression + ')')();
-            if (typeof result !== 'number' || isNaN(result) || !isFinite(result)) {
-                return `Invalid formula. Check operators and parentheses.`;
+
+            // For numeric type, require numeric result
+            if (columnType === 'numeric') {
+                if (typeof result !== 'number' || isNaN(result) || !isFinite(result)) {
+                    return `Invalid formula. Check operators and parentheses.`;
+                }
+            }
+            // For boolean type, require boolean result
+            else if (columnType === 'boolean') {
+                if (typeof result !== 'boolean') {
+                    return `Invalid condition. Must evaluate to true/false. Use comparison operators: >, <, >=, <=, ==, !=`;
+                }
             }
         } catch (e) {
-            return `Invalid formula syntax. Check column names, operators (+, -, *, /), and parentheses. Available columns: ${sortedFields.join(', ')}`;
+            const operators = columnType === 'numeric' ? '+, -, *, /' : '>, <, >=, <=, ==, !=, &&, ||';
+            return `Invalid ${columnType === 'numeric' ? 'formula' : 'condition'} syntax. Check column names, operators (${operators}), and parentheses. Available columns: ${sortedFields.join(', ')}`;
         }
 
         return null;
@@ -136,20 +160,57 @@ export default function ComputedColumnModal({
                         />
                     </div>
 
+                    {/* Column Type Selector */}
+                    <div>
+                        <label className="text-xs md:text-sm font-medium">Column Type</label>
+                        <div className="flex gap-4 mt-2">
+                            <label className="flex items-center gap-2 cursor-pointer">
+                                <input
+                                    type="radio"
+                                    name="columnType"
+                                    value="numeric"
+                                    checked={columnType === 'numeric'}
+                                    onChange={(e) => setColumnType('numeric')}
+                                    className="w-4 h-4 text-green-600 focus:ring-green-500 focus:ring-2"
+                                />
+                                <span className="text-sm">Numeric Formula</span>
+                            </label>
+                            <label className="flex items-center gap-2 cursor-pointer">
+                                <input
+                                    type="radio"
+                                    name="columnType"
+                                    value="boolean"
+                                    checked={columnType === 'boolean'}
+                                    onChange={(e) => setColumnType('boolean')}
+                                    className="w-4 h-4 text-green-600 focus:ring-green-500 focus:ring-2"
+                                />
+                                <span className="text-sm">Boolean Condition</span>
+                            </label>
+                        </div>
+                    </div>
+
                     {/* Formula Input */}
                     <div>
-                        <label htmlFor="formula" className="text-xs md:text-sm font-medium">Formula</label>
+                        <label htmlFor="formula" className="text-xs md:text-sm font-medium">
+                            {columnType === 'numeric' ? 'Formula' : 'Condition'}
+                        </label>
                         <input
                             id="formula"
                             name="formula"
                             type="text"
                             className="w-full h-12 rounded-md bg-slate-800 mt-1 border border-slate-600 px-4 focus:outline-none focus:border-green-500 text-[16px] md:text-base font-mono"
-                            placeholder="e.g., 0.4 * Auto EPA + 0.6 * Teleop EPA"
+                            placeholder={
+                                columnType === 'numeric'
+                                    ? "e.g., 0.4 * Auto EPA + 0.6 * Teleop EPA"
+                                    : "e.g., Deep Cage Climb > 0.5"
+                            }
                             value={formula}
                             onChange={(e) => setFormula(e.target.value)}
                         />
                         <p className="text-xs text-gray-400 mt-1">
-                            Use column names and operators: + - * / ( )
+                            {columnType === 'numeric'
+                                ? 'Use column names and operators: + - * / ( )'
+                                : 'Use column names and operators: > < >= <= == != && ||'}
                         </p>
                     </div>
 
@@ -190,7 +251,7 @@ export default function ComputedColumnModal({
                         </button>
                         <button
                             type="button"
-                            onClick={() => setModalStatus(false)}
+                            onClick={handleClose}
                             className="px-4 h-12 rounded-md font-medium text-base bg-slate-600/50 hover:bg-slate-600 transition-colors"
                         >
                             Cancel
@@ -198,7 +259,7 @@ export default function ComputedColumnModal({
                     </div>
                 </form>
 
-                <button className="absolute w-8 h-8 right-4 top-4" onClick={() => setModalStatus(false)}>
+                <button className="absolute w-8 h-8 right-4 top-4" onClick={handleClose}>
                     <XMarkIcon className="w-7 h-7 md:w-8 md:h-8 text-slate-400 hover:text-slate-200" />
                 </button>
             </div>
